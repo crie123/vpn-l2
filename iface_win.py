@@ -11,7 +11,7 @@ class RealInterface:
         if not self.iface:
             raise Exception(f"Интерфейс '{iface_hint}' не найден")
 
-        print(f"[🎯] Используем интерфейс: {self.iface}")
+        print(f"Используем интерфейс: {self.iface}")
 
         self._last_packet = None
         self._lock = threading.Lock()
