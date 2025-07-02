@@ -1,19 +1,12 @@
-class RealInterfaceStub:
-    def __init__(self):
-        self._last = None
+import platform
 
-    def write(self, data: bytes):
-        self._last = data
-        print(f"[TUN] 🔼 write: {data}")
+if platform.system() == "Windows":
+    from iface_win import RealInterface as RealInterfaceImpl
+else:
+    from iface_linux import RealInterface as RealInterfaceImpl
 
-    def consume(self):
-        if self._last:
-            tmp = self._last
-            self._last = None
-            print(f"[TUN] 🔽 consume: {tmp}")
-            return tmp
-        print(f"[TUN] 🔽 consume: None")
-        return None
-
-    def inject(self, data: bytes):
-        print(f"[RECV] ← {data.decode('utf-8', errors='ignore')}")
+class RealInterface(RealInterfaceImpl):
+    def __init__(self, iface_hint=None):
+        # В Linux iface_hint = название интерфейса, например 'eth0'
+        # В Windows — часть имени интерфейса, например 'Wi-Fi'
+        super().__init__(iface_hint)
