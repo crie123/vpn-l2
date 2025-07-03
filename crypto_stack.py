@@ -98,12 +98,16 @@ async def encrypt_message(message: str, server_url: str) -> bytes:
     salt = int(time.time()).to_bytes(8, 'little') + os.urandom(8)
     tick_key = derive_key_from_snapshot(snapshot, salt)
 
-    input_bytes = bytearray(message.encode('utf-8'))
+    if isinstance(message, str):
+       input_bytes = bytearray(message.encode('utf-8'))
+    else:
+       input_bytes = bytearray(message)
+    
     encrypted = encrypt_stream(input_bytes, tick_key, salt)
     hashed = fast_hash(encrypted)
     return hashed + encrypted
 
-async def decrypt_message(encrypted: bytes, server_url: str) -> str:
+async def decrypt_message(encrypted: bytes, server_url: str) -> bytes:
     snapshot = await get_snapshot(server_url)
     recv_hash = encrypted[:16]
     salt = encrypted[16:32]
@@ -116,4 +120,4 @@ async def decrypt_message(encrypted: bytes, server_url: str) -> str:
     if recv_hash != actual_hash:
         raise ValueError("Hash mismatch! Possible tampering or corruption.")
 
-    return decrypted.decode('utf-8')
+    return bytes(decrypted)
