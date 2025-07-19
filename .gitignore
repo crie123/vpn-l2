@@ -1,0 +1,21 @@
+# Excluding system files and directories
+__pycache__/
+wintun/
+*.pyc
+*.pyo
+*.log
+*.env
+.venv/
+.env/
+*.sqlite
+*.db
+
+# Exclude configuration files
+client_config.json
+server_config.json
+
+# Exclude compiled binaries and libraries
+wintun.dll
+*.exe
+*.so
+*.pyd
