@@ -12,3 +12,12 @@ def parse_frame(frame: bytes):
     if len(frame) < 3:
         return None, b''
     return frame[0], frame[3:3+int.from_bytes(frame[1:3], 'big')]
+
+ETHERTYPE_MAP = {
+    "CUSTOM": 0x88B5,
+    "ARP": 0x0806,
+    "LLDP": 0x88CC
+}
+
+def get_ethertype(name: str) -> int:
+    return ETHERTYPE_MAP.get(name.upper(), 0x88B5)  # по умолчанию CUSTOM
