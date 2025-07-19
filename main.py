@@ -26,7 +26,11 @@ def get_platform_settings(config):
 
 
 def generate_config_and_send_to_vps():
-    if os.path.exists(CLIENT_CONFIG):
+    config_dir = os.path.dirname(os.path.abspath(__file__))
+    client_config_path = os.path.join(config_dir, CLIENT_CONFIG)
+    server_config_path = os.path.join(config_dir, SERVER_CONFIG)
+
+    if os.path.exists(client_config_path):
         return
 
     print("Конфиг не найден. Генерирую...")
@@ -65,9 +69,9 @@ def generate_config_and_send_to_vps():
         "platform_settings": platform_settings
     }
 
-    with open(CLIENT_CONFIG, "w") as f:
+    with open(client_config_path, "w") as f:
         json.dump(client_config, f, indent=2)
-    with open(SERVER_CONFIG, "w") as f:
+    with open(server_config_path, "w") as f:
         json.dump(server_config, f, indent=2)
 
     print("Отправка server_config.json на VPS...")
@@ -76,7 +80,7 @@ def generate_config_and_send_to_vps():
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(server_ip, port=ssh_port, username=ssh_user, password=ssh_password)
         sftp = ssh.open_sftp()
-        sftp.put(SERVER_CONFIG, "server_config.json")
+        sftp.put(server_config_path, "server_config.json")
         sftp.close()
         ssh.close()
         print("server_config.json успешно отправлен.")
@@ -150,6 +154,6 @@ async def main():
         )
     finally:
         del interface
-
+    
 if __name__ == "__main__":
     asyncio.run(main())
