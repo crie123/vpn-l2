@@ -4,7 +4,7 @@ import threading
 import queue
 import time
 import os
-from ctypes import wintypes, c_void_p, POINTER, c_char_p, c_wchar_p, c_byte, WINFUNCTYPE, Structure
+from ctypes import wintypes, c_void_p, POINTER, c_wchar_p, c_byte, Structure
 import pydivert
 
 # Define GUID structure

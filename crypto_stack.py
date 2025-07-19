@@ -1,5 +1,4 @@
 import aiohttp
-import asyncio
 import os
 import time
 import hashlib
@@ -11,12 +10,15 @@ import json
 
 # Client-Side Constants
 
-def load_secret_key(config_path="client_config.json"):
+def get_secret_key(config_path="client_config.json"):
+    if not os.path.exists(config_path):
+        raise RuntimeError(f"Secret key config not found: {config_path}")
+    
     with open(config_path, "r") as f:
         config = json.load(f)
+    
     return base64.b64decode(config["secret_key"])
 
-SECRET_KEY = load_secret_key()
 MAX_DRIFT = 60  # seconds
 
 # Snapshot + Tick Key
@@ -42,7 +44,7 @@ async def authenticate_with_function(session, server_url):
 
 def verify_snapshot_signature(tick, seed, timestamp, signature):
     msg = f"{tick}|{seed}|{timestamp}".encode()
-    expected = hmac.new(SECRET_KEY, msg, hashlib.sha256).digest()
+    expected = hmac.new(get_secret_key(), msg, hashlib.sha256).digest()
     return base64.b64encode(expected).decode() == signature
 
 async def get_snapshot(server_url):
