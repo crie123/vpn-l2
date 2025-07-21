@@ -1,12 +1,12 @@
 # main.py (VPN Client через Wintun с фильтрацией по интерфейсу)
-import json, asyncio, socket, os, time, base64, platform, getpass
+import json, asyncio, socket, os, time, base64, platform, getpass, sys
 from crypto_stack import encrypt_message, decrypt_message
 from protocol import build_frame, parse_frame, FRAME_TYPE_DATA
 import paramiko
 from tun import RealInterface
 
-CLIENT_CONFIG = "client_config.json"
-SERVER_CONFIG = "server_config.json"
+CLIENT_CONFIG = os.path.join(os.path.dirname(sys.executable), "client_config.json")
+SERVER_CONFIG = os.path.join(os.path.dirname(sys.executable), "server_config.json")
 
 
 def get_platform_settings(config):

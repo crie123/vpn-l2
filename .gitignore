@@ -1,6 +1,7 @@
 # Excluding system files and directories
 __pycache__/
 wintun/
+dist/
 *.pyc
 *.pyo
 *.log
