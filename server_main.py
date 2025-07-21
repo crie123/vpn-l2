@@ -1,5 +1,5 @@
 # server_main.py (Wintun-only через указанный интерфейс)
-import json, socket, asyncio, os, threading, time, random, hashlib, hmac, base64, platform
+import json, socket, asyncio, os, threading, time, random, hashlib, hmac, base64, platform, sys
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -15,7 +15,7 @@ elif platform.system() == 'Linux':
 else:
     raise RuntimeError(f"Unsupported platform: {platform.system()}")
 
-CONFIG_FILE = "server_config.json"
+CONFIG_FILE = os.path.join(os.path.dirname(sys.executable), "server_config.json")
 
 app = FastAPI()
 app.add_middleware(

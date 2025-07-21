@@ -4,6 +4,7 @@ import threading
 import queue
 import time
 import os
+import sys
 from ctypes import wintypes, c_void_p, POINTER, c_wchar_p, c_byte, Structure
 import pydivert
 
@@ -61,7 +62,8 @@ class RealInterface:
         
         try:
             # Load Wintun DLL
-            dll_path = os.path.join(os.path.dirname(__file__), "wintun.dll")
+            dll_path = os.path.join(os.path.dirname(sys.executable), "wintun.dll")
+            self.lib = ctypes.WinDLL(dll_path)
             if not os.path.exists(dll_path):
                 raise FileNotFoundError("wintun.dll не найден. Пожалуйста, скачайте его с https://www.wintun.net")
             
