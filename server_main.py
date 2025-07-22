@@ -104,33 +104,33 @@ def start_tick_thread():
 
 def setup_routing(interface_ip):
     if platform.system() == "Windows":
-        # Удалим старый маршрут (если есть)
+        # Delete old route if exists
         subprocess.call([
             "powershell", "-Command",
             f"$route = Get-NetRoute -DestinationPrefix 0.0.0.0/0 -InterfaceAlias 'vpn-l2' -ErrorAction SilentlyContinue; "
             f"if ($route) {{ Remove-NetRoute -DestinationPrefix 0.0.0.0/0 -InterfaceAlias 'vpn-l2' -Confirm:$false }}"
         ])
 
-        # Удалим старый IP (если есть), чтобы не было дубликатов
+        # Delete old IP if exists
         subprocess.call([
             "powershell", "-Command",
             f"$ip = Get-NetIPAddress -InterfaceAlias 'vpn-l2' -AddressFamily IPv4 -ErrorAction SilentlyContinue; "
             f"if ($ip) {{ $ip | Remove-NetIPAddress -Confirm:$false }}"
         ])
 
-        # Назначим IP
+        # Assign new IP address
         subprocess.call([
             "powershell", "-Command",
             f"New-NetIPAddress -InterfaceAlias 'vpn-l2' -IPAddress {interface_ip} -PrefixLength 16 -SkipAsSource $true"
         ])
 
-        # Добавим маршрут
+        # Add default route
         subprocess.call([
             "powershell", "-Command",
             f"New-NetRoute -DestinationPrefix 0.0.0.0/0 -InterfaceAlias 'vpn-l2' -NextHop 0.0.0.0 -Publish Yes"
         ])
 
-        # Удалим маршрут при завершении
+        # Delete old route on exit
         atexit.register(lambda: subprocess.call([
             "powershell", "-Command",
             f"Remove-NetRoute -DestinationPrefix 0.0.0.0/0 -InterfaceAlias 'vpn-l2' -Confirm:$false"
@@ -147,18 +147,18 @@ def setup_nat_and_forwarding():
     system = platform.system()
     if system == "Windows":
         try:
-            # Включаем IP маршрутизацию в реестре
+            # Turn on IP forwarding in registry
             subprocess.call([
                 "powershell", "-Command",
                 "Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters' -Name 'IPEnableRouter' -Value 1"
             ])
-            # Включаем IP forwarding через интерфейс
+            # Turn on IP forwarding for the interface
             subprocess.call([
                 "powershell", "-Command",
                 "Set-NetIPInterface -InterfaceAlias 'vpn-l2' -Forwarding Enabled"
             ])
 
-            # Создаём NAT для подсети 10.0.0.0/24
+            # Create NAT if it doesn't exist
             subprocess.call([
                 "powershell", "-Command",
                 "if (-not (Get-NetNat | Where-Object { $_.Name -eq 'VpnNat' })) { "
@@ -169,10 +169,10 @@ def setup_nat_and_forwarding():
             print(f"[!] Ошибка NAT/forwarding (Windows): {e}")
     elif system == "Linux":
         try:
-            # Включаем IP forwarding
+            # Turn on IP forwarding
             with open("/proc/sys/net/ipv4/ip_forward", "w") as f:
                 f.write("1")
-            # Добавляем iptables правило для NAT
+            # Add NAT rule
             subprocess.call(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "eth0", "-j", "MASQUERADE"])
             print("[+] NAT и IP маршрутизация настроены (Linux)")
         except Exception as e:
@@ -214,7 +214,7 @@ async def packet_processor(sock, config):
                     interface.inject(decrypted)
                     print(f"Инъекция {len(decrypted)} байт")
                 except Exception as e:
-                    print(f"⚠ Ошибка инъекции: {e}")
+                    print(f"Ошибка инъекции: {e}")
 
                 for _ in range(20):
                     response = interface.consume()
