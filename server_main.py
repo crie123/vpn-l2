@@ -164,9 +164,9 @@ def setup_nat_and_forwarding():
                 "if (-not (Get-NetNat | Where-Object { $_.Name -eq 'VpnNat' })) { "
                 "New-NetNat -Name 'VpnNat' -InternalIPInterfaceAddressPrefix '10.0.0.0/24' }"
             ])
-            print("[+] NAT и IP маршрутизация настроены (Windows)")
+            print("NAT и IP маршрутизация настроены (Windows)")
         except Exception as e:
-            print(f"[!] Ошибка NAT/forwarding (Windows): {e}")
+            print(f"Ошибка NAT/forwarding (Windows): {e}")
     elif system == "Linux":
         try:
             # Turn on IP forwarding
@@ -174,9 +174,9 @@ def setup_nat_and_forwarding():
                 f.write("1")
             # Add NAT rule
             subprocess.call(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "eth0", "-j", "MASQUERADE"])
-            print("[+] NAT и IP маршрутизация настроены (Linux)")
+            print("NAT и IP маршрутизация настроены (Linux)")
         except Exception as e:
-            print(f"[!] Ошибка NAT/forwarding (Linux): {e}")
+            print(f"Ошибка NAT/forwarding (Linux): {e}")
 
 
 
