@@ -1,24 +1,13 @@
 import socket
 import os
+import fcntl
+import struct
 
-def list_ifaces_linux():
-    # through /sys/class/net we can get the list of network interfaces
-    return os.listdir('/sys/class/net')
 
 class RealInterface:
     def __init__(self, iface_hint=None, is_client=False):
-        if iface_hint is None:
-            ifaces = list_ifaces_linux()
-            # Look for a suitable interface that is not loopback or docker
-            for i in ifaces:
-                if i != 'lo' and not i.startswith('docker'):
-                    iface_hint = i
-                    break
-            else:
-                iface_hint = 'eth0'  # fallback
-
-        self.iface = iface_hint
         self.is_client = is_client
+        self.iface = iface_hint or self._default_iface()
 
         self.recv_sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.ntohs(3))
         self.recv_sock.bind((self.iface, 0))
@@ -26,6 +15,12 @@ class RealInterface:
 
         self.send_sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
         self.send_sock.bind((self.iface, 0))
+
+    def _default_iface(self):
+        for iface in os.listdir('/sys/class/net'):
+            if iface != 'lo' and not iface.startswith('docker'):
+                return iface
+        return 'eth0'
 
     def consume(self):
         try:
@@ -38,3 +33,20 @@ class RealInterface:
 
     def inject(self, data: bytes):
         self.write(data)
+
+    def get_ip(self):
+        """Возвращает IP-адрес интерфейса."""
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        return socket.inet_ntoa(fcntl.ioctl(
+            s.fileno(),
+            0x8915,  # SIOCGIFADDR
+            struct.pack('256s', self.iface[:15].encode())
+        )[20:24])
+
+    def get_index(self):
+        """Возвращает индекс интерфейса."""
+        return socket.if_nametoindex(self.iface)
+
+    @property
+    def iface_name(self):
+        return self.iface

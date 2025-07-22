@@ -1,7 +1,6 @@
-# main.py (VPN Client через Wintun с фильтрацией по интерфейсу)
-import json, asyncio, socket, os, time, base64, platform, getpass, sys
+import json, asyncio, socket, os, time, base64, platform, getpass, sys, atexit, subprocess
 from crypto_stack import encrypt_message, decrypt_message
-from protocol import build_frame, parse_frame, FRAME_TYPE_DATA
+from protocol import build_frame, parse_frame, FRAME_TYPE_DATA, MAX_PAYLOAD_SIZE
 import paramiko
 from tun import RealInterface
 
@@ -43,7 +42,6 @@ def generate_config_and_send_to_vps():
     server_http_port = 8000
     server_udp_ports = [5555]
 
-    # Add platform-specific settings
     platform_settings = {
         'windows': {
             'adapter_name': 'vpn-l2'
@@ -94,13 +92,46 @@ def load_config():
         return json.load(f)
 
 
-# Используем Wintun для создания виртуального интерфейса
+def setup_routing(interface: RealInterface):
+    iface_ip = interface.get_ip()
+    iface_index = interface.get_index()
+
+    print(f"VPN интерфейс: {interface.iface_name} IP: {iface_ip} Index: {iface_index}")
+
+    if platform.system() == "Windows":
+        try:
+            subprocess.call([
+                "route", "add", "0.0.0.0", "mask", "0.0.0.0",
+                iface_ip, "metric", "3", "if", str(iface_index)
+            ])
+            print("[✓] Добавлен маршрут по умолчанию через VPN")
+            atexit.register(lambda: subprocess.call([
+                "route", "delete", "0.0.0.0", "if", str(iface_index)
+            ]))
+        except Exception as e:
+            print(f"[!] Ошибка настройки маршрута: {e}")
+
+    elif platform.system() == "Linux":
+        try:
+            subprocess.call(["ip", "route", "add", "default", "dev", interface.iface_name])
+            print("[✓] Добавлен маршрут по умолчанию через VPN")
+            atexit.register(lambda: subprocess.call([
+                "ip", "route", "del", "default", "dev", interface.iface_name
+            ]))
+        except Exception as e:
+            print(f"[!] Ошибка настройки маршрута: {e}")
+
+
 async def send_loop(interface, sock, config, server_url):
     while True:
         try:
             packet = interface.consume()
             if not packet:
                 await asyncio.sleep(0.1)
+                continue
+
+            if len(packet) > MAX_PAYLOAD_SIZE:
+                print(f"⚠ Пакет слишком длинный: {len(packet)} байт, отбрасываем")
                 continue
 
             encrypted = await encrypt_message(packet, server_url)
@@ -123,8 +154,11 @@ async def recv_loop(interface, sock, config, server_url):
 
             decrypted = await decrypt_message(payload, server_url)
             if decrypted:
-                interface.inject(decrypted)
-                print(f"← Иньекция ответа: {len(decrypted)} байт")
+                try:
+                    interface.inject(decrypted)
+                    print(f"← Иньекция ответа: {len(decrypted)} байт")
+                except Exception as e:
+                    print(f"⚠ Ошибка inject: {e}")
         except Exception as e:
             print("Ошибка recv_loop:", e)
             await asyncio.sleep(0.1)
@@ -146,7 +180,10 @@ async def main():
         iface_hint=platform_settings.get('interface_name') or platform_settings.get('adapter_name'),
         is_client=True
     )
-    
+
+    # Установка маршрутов
+    setup_routing(interface)
+
     try:
         await asyncio.gather(
             send_loop(interface, sock, config, server_url),
@@ -154,6 +191,6 @@ async def main():
         )
     finally:
         del interface
-    
+
 if __name__ == "__main__":
     asyncio.run(main())
