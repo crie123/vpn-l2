@@ -250,7 +250,7 @@ class RealInterface:
             except Exception as e:
                 pass
             time.sleep(delay)
-        print("[!] Не удалось получить IP-адрес интерфейса после ожидания.")
+        print("Не удалось получить IP-адрес интерфейса после ожидания.")
         return None
 
     def get_index(self):

@@ -104,22 +104,22 @@ def setup_routing(interface: RealInterface):
                 "route", "add", "0.0.0.0", "mask", "0.0.0.0",
                 iface_ip, "metric", "3", "if", str(iface_index)
             ])
-            print("[✓] Добавлен маршрут по умолчанию через VPN")
+            print("[Добавлен маршрут по умолчанию через VPN")
             atexit.register(lambda: subprocess.call([
                 "route", "delete", "0.0.0.0", "if", str(iface_index)
             ]))
         except Exception as e:
-            print(f"[!] Ошибка настройки маршрута: {e}")
+            print(f"[Ошибка настройки маршрута: {e}")
 
     elif platform.system() == "Linux":
         try:
             subprocess.call(["ip", "route", "add", "default", "dev", interface.iface_name])
-            print("[✓] Добавлен маршрут по умолчанию через VPN")
+            print("[Добавлен маршрут по умолчанию через VPN")
             atexit.register(lambda: subprocess.call([
                 "ip", "route", "del", "default", "dev", interface.iface_name
             ]))
         except Exception as e:
-            print(f"[!] Ошибка настройки маршрута: {e}")
+            print(f"Ошибка настройки маршрута: {e}")
 
 
 async def send_loop(interface, sock, config, server_url):
@@ -131,13 +131,13 @@ async def send_loop(interface, sock, config, server_url):
                 continue
 
             if len(packet) > MAX_PAYLOAD_SIZE:
-                print(f"⚠ Пакет слишком длинный: {len(packet)} байт, отбрасываем")
+                print(f"Пакет слишком длинный: {len(packet)} байт, отбрасываем")
                 continue
 
             encrypted = await encrypt_message(packet, server_url)
             frame = build_frame(FRAME_TYPE_DATA, encrypted)
             sock.sendto(frame, (config["server_ip"], config["server_udp_ports"][0]))
-            print(f"→ Отправлен VPN-фрейм {len(frame)} байт")
+            print(f"Отправлен VPN-фрейм {len(frame)} байт")
         except Exception as e:
             print("Ошибка send_loop:", e)
             await asyncio.sleep(0.1)
@@ -156,9 +156,9 @@ async def recv_loop(interface, sock, config, server_url):
             if decrypted:
                 try:
                     interface.inject(decrypted)
-                    print(f"← Иньекция ответа: {len(decrypted)} байт")
+                    print(f"Иньекция ответа: {len(decrypted)} байт")
                 except Exception as e:
-                    print(f"⚠ Ошибка inject: {e}")
+                    print(f"Ошибка inject: {e}")
         except Exception as e:
             print("Ошибка recv_loop:", e)
             await asyncio.sleep(0.1)
