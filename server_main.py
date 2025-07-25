@@ -3,7 +3,7 @@ import json, socket, asyncio, os, threading, time, random, hashlib, hmac, base64
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from protocol import build_frame, parse_frame, FRAME_TYPE_DATA
+from protocol import build_frame, parse_frame, FRAME_TYPE_DATA, fragment_payload
 from crypto_stack import decrypt_message, encrypt_message
 import uvicorn
 
@@ -219,9 +219,10 @@ async def packet_processor(sock, config):
                 for _ in range(20):
                     response = interface.consume()
                     if response:
-                        encrypted = await encrypt_message(response, server_url)
-                        reply = build_frame(FRAME_TYPE_DATA, encrypted)
-                        sock.sendto(reply, addr)
+                        for part in fragment_payload(response):
+                            encrypted = await encrypt_message(part, server_url)
+                            reply = build_frame(FRAME_TYPE_DATA, encrypted)
+                            sock.sendto(reply, addr)
                         print(f"Ответ отправлен клиенту {addr}")
                         break
                     await asyncio.sleep(0.1)

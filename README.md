@@ -16,3 +16,11 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
+
+# Сборка клиента
+pyinstaller main.py --onefile --name vpn_client.exe
+
+# Сборка сервера
+pyinstaller server_main.py --onefile --name vpn_server.exe
+```
+Конфиг в исполняемый файл не входит(для удобства)

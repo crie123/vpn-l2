@@ -1,6 +1,6 @@
 import json, asyncio, socket, os, time, base64, platform, getpass, sys, atexit, subprocess
 from crypto_stack import encrypt_message, decrypt_message
-from protocol import build_frame, parse_frame, FRAME_TYPE_DATA, MAX_PAYLOAD_SIZE
+from protocol import build_frame, parse_frame, FRAME_TYPE_DATA, MAX_PAYLOAD_SIZE, defragment
 import paramiko
 from tun import RealInterface
 
@@ -153,12 +153,10 @@ async def recv_loop(interface, sock, config, server_url):
                 continue
 
             decrypted = await decrypt_message(payload, server_url)
-            if decrypted:
-                try:
-                    interface.inject(decrypted)
-                    print(f"Иньекция ответа: {len(decrypted)} байт")
-                except Exception as e:
-                    print(f"Ошибка inject: {e}")
+            full = defragment(decrypted)
+            if full is None:
+                continue  # wait for all parts
+            interface.inject(full)
         except Exception as e:
             print("Ошибка recv_loop:", e)
             await asyncio.sleep(0.1)
