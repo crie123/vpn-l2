@@ -9,7 +9,7 @@ server-client architecture.
 import os
 import json
 import base64
-from typing import Optional, Union
+from typing import Optional, Union, TYPE_CHECKING
 
 # Import teeth-gnashing client components - only import what we need
 try:
@@ -23,17 +23,8 @@ except ImportError as e:
     import sys
     import importlib.util
     spec = importlib.util.find_spec("teeth_gnashing.client")
-    if spec and spec.origin:
-        spec_module = importlib.util.module_from_spec(spec)
-        sys.modules["teeth_gnashing.client"] = spec_module
-        spec.loader.exec_module(spec_module)
-        CryptoClient = spec_module.CryptoClient
-        CryptoConfig = spec_module.CryptoConfig
-        CryptoError = spec_module.CryptoError
-        AuthenticationError = spec_module.AuthenticationError
-        SnapshotError = spec_module.SnapshotError
-    else:
-        raise
+    if TYPE_CHECKING or spec is not None:
+        from teeth_gnashing.client import CryptoClient, CryptoConfig, CryptoError, AuthenticationError, SnapshotError
 
 # Global client instance
 _crypto_client: Optional[CryptoClient] = None
