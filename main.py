@@ -1,5 +1,5 @@
 import json, asyncio, socket, os, time, base64, platform, getpass, sys, atexit, subprocess
-from crypto_stack import encrypt_message, decrypt_message
+from crypto_stack import encrypt_message, decrypt_message, close_crypto_client
 from protocol import build_frame, parse_frame, FRAME_TYPE_DATA, MAX_PAYLOAD_SIZE, defragment
 import paramiko
 from tun import RealInterface
@@ -56,6 +56,10 @@ def generate_config_and_send_to_vps():
         "server_http_port": server_http_port,
         "server_udp_ports": server_udp_ports,
         "secret_key": secret_key,
+        "max_drift": 60,
+        "handshake_points": 8,
+        "hash_size": 32,
+        "array_size": 256,
         "platform_settings": platform_settings
     }
 
@@ -64,6 +68,9 @@ def generate_config_and_send_to_vps():
         "server_http_port": server_http_port,
         "server_udp_ports": server_udp_ports,
         "secret_key": secret_key,
+        "tick_interval": 1.0,
+        "hash_size": 32,
+        "array_size": 256,
         "platform_settings": platform_settings
     }
 
@@ -189,6 +196,7 @@ async def main():
         )
     finally:
         del interface
+        await close_crypto_client()
 
 if __name__ == "__main__":
     asyncio.run(main())

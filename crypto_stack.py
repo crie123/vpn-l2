@@ -1,139 +1,179 @@
-import aiohttp
+"""
+Crypto stack module using teeth-gnashing library for VPN encryption.
+
+This module provides encryption/decryption functionality using the teeth-gnashing
+production-grade library, which implements dynamic snapshot-based encryption with
+server-client architecture.
+"""
+
 import os
-import time
-import hashlib
-import random
-import hmac
-import base64
-from math import gcd
 import json
+import base64
+from typing import Optional, Union
+import logging
 
-# Client-Side Constants
+# Use module logger; default logging level will suppress debug output unless configured
+logger = logging.getLogger(__name__)
 
-def get_secret_key(config_path="client_config.json"):
+
+# Import teeth-gnashing client components - prefer direct import; fallback silently to file loading
+try:
+    from teeth_gnashing.client import (
+        CryptoClient,
+        CryptoConfig,
+        CryptoError,
+        AuthenticationError,
+        SnapshotError,
+    )
+except Exception as exc:  # noqa: BLE001 - guard against any import-time errors in package __init__
+    logger.debug("Direct import of teeth_gnashing.client failed: %s", exc)
+    # Try to locate and load client.py directly from site-packages without executing package __init__
+    import sys
+    from pathlib import Path
+    import importlib.util
+
+    client_module = None
+    for p in sys.path:
+        try_path = Path(p) / "teeth_gnashing" / "client.py"
+        if try_path.exists():
+            spec = importlib.util.spec_from_file_location("teeth_gnashing.client", str(try_path))
+            if spec and spec.loader:
+                module = importlib.util.module_from_spec(spec)
+                # Register under package.submodule name so relative imports work if any
+                sys.modules["teeth_gnashing.client"] = module
+                spec.loader.exec_module(module)
+                client_module = module
+                break
+
+    if client_module is None:
+        # As a last resort, attempt normal import to surface the original error
+        raise ImportError(
+            "Failed to import 'teeth_gnashing.client'. Ensure 'teeth-gnashing' is installed and not broken. "
+            "Original error: %s" % exc
+        ) from exc
+
+    # Extract expected symbols
+    CryptoClient = client_module.CryptoClient
+    CryptoConfig = client_module.CryptoConfig
+    CryptoError = client_module.CryptoError
+    AuthenticationError = client_module.AuthenticationError
+    SnapshotError = client_module.SnapshotError
+
+# Global client instance
+_crypto_client: Optional[CryptoClient] = None
+
+
+def load_config(config_path: str = "client_config.json") -> dict:
+    """Load client configuration from JSON file."""
     if not os.path.exists(config_path):
         raise RuntimeError(f"Secret key config not found: {config_path}")
     
     with open(config_path, "r") as f:
-        config = json.load(f)
+        return json.load(f)
+
+
+def get_crypto_client(server_url: str, config_path: str = "client_config.json") -> CryptoClient:
+    """
+    Get or initialize the global crypto client instance.
     
-    return base64.b64decode(config["secret_key"])
+    Args:
+        server_url: Base URL of the crypto server (e.g., http://localhost:8000)
+        config_path: Path to client configuration JSON file
+        
+    Returns:
+        Initialized CryptoClient instance
+        
+    Raises:
+        RuntimeError: If configuration file not found
+        CryptoError: If initialization fails
+    """
+    global _crypto_client
+    
+    if _crypto_client is None:
+        config_data = load_config(config_path)
+        
+        # Create CryptoConfig from loaded data
+        crypto_config = CryptoConfig(
+            server_url=server_url,
+            secret_key=base64.b64decode(config_data["secret_key"]),
+            max_drift=config_data.get("max_drift", 60),
+            handshake_points=config_data.get("handshake_points", 8),
+            hash_size=config_data.get("hash_size", 32),
+            array_size=config_data.get("array_size", 256)
+        )
+        
+        _crypto_client = CryptoClient(crypto_config)
+    
+    return _crypto_client
 
-MAX_DRIFT = 60  # seconds
 
-# Snapshot + Tick Key
+async def authenticate_with_server(server_url: str, config_path: str = "client_config.json") -> None:
+    """
+    Perform authentication handshake with the crypto server.
+    
+    Args:
+        server_url: Base URL of the crypto server
+        config_path: Path to client configuration JSON file
+        
+    Raises:
+        AuthenticationError: If handshake fails
+    """
+    client = get_crypto_client(server_url, config_path)
+    await client.authenticate()
 
-def generate_function_points(n=8):
-    return [(random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(-1, 1), random.uniform(0, 1)) for _ in range(n)]
 
-def hash_function_points(points):
-    flat = b"".join([
-        float(x).hex().encode() + float(y).hex().encode() + float(z).hex().encode() + float(v).hex().encode()
-        for x, y, z, v in points
-    ])
-    return hashlib.blake2s(flat, digest_size=16).digest()
+async def encrypt_message(message: Union[str, bytes], server_url: str, 
+                         config_path: str = "client_config.json") -> bytes:
+    """
+    Encrypt a message using teeth-gnashing.
+    
+    This function uses dynamic snapshot-based encryption with server-generated
+    snapshots and local key derivation.
+    
+    Args:
+        message: String or bytes to encrypt
+        server_url: Base URL of the crypto server
+        config_path: Path to client configuration JSON file
+        
+    Returns:
+        Encrypted message as bytes (format: hash + salt + encrypted_data)
+        
+    Raises:
+        AuthenticationError: If authentication with server fails
+        SnapshotError: If snapshot retrieval/verification fails
+        CryptoError: If encryption fails
+    """
+    client = get_crypto_client(server_url, config_path)
+    return await client.encrypt_message(message)
 
-async def authenticate_with_function(session, server_url):
-    points = generate_function_points()
-    func_hash = hash_function_points(points)
-    payload = {"hash": func_hash.hex()}
-    async with session.post(f"{server_url}/handshake", json=payload) as resp:
-        if resp.status != 200:
-            raise Exception("Authentication failed")
-        return points
 
-def verify_snapshot_signature(tick, seed, timestamp, signature):
-    msg = f"{tick}|{seed}|{timestamp}".encode()
-    expected = hmac.new(get_secret_key(), msg, hashlib.sha256).digest()
-    return base64.b64encode(expected).decode() == signature
+async def decrypt_message(encrypted: bytes, server_url: str,
+                         config_path: str = "client_config.json") -> bytes:
+    """
+    Decrypt a message using teeth-gnashing.
+    
+    This function reverses the encryption using the same snapshot-based approach.
+    
+    Args:
+        encrypted: Encrypted message bytes
+        server_url: Base URL of the crypto server
+        config_path: Path to client configuration JSON file
+        
+    Returns:
+        Decrypted message as bytes
+        
+    Raises:
+        AuthenticationError: If authentication with server fails
+        SnapshotError: If snapshot retrieval/verification fails
+        CryptoError: If decryption fails or integrity check fails
+    """
+    client = get_crypto_client(server_url, config_path)
+    return await client.decrypt_message(encrypted)
 
-async def get_snapshot(server_url):
-    async with aiohttp.ClientSession() as session:
-        await authenticate_with_function(session, server_url)
-        async with session.get(f"{server_url}/snapshot") as response:
-            snap = await response.json()
-            now = int(time.time())
-            if abs(now - snap["timestamp"]) > MAX_DRIFT:
-                raise ValueError("Snapshot expired or too far in future")
-            if not verify_snapshot_signature(snap["tick"], snap["seed"], snap["timestamp"], snap["signature"]):
-                raise ValueError("Invalid snapshot signature")
-            return snap
 
-def derive_key_from_snapshot(snapshot, salt: bytes):
-    seed = snapshot['seed']
-    tick = snapshot['tick'] ^ int.from_bytes(salt[:4], 'little')
-
-    arr = [[[0 for _ in range(4)] for _ in range(4)] for _ in range(4)]
-    value = seed
-    for i in range(64):
-        z, y, x = i // 16, (i % 16) // 4, i % 4
-        arr[z][y][x] = value
-        value += 1 if z < 2 else -1
-
-    tick_bytes = []
-    for i in range(64):
-        z, y, x = i // 16, (i % 16) // 4, i % 4
-        tick_val = arr[z][y][x]
-        pos_val = ((z << 4) | (y << 2) | x) & 0xFF
-        raw = (pos_val ^ (tick_val & 0xFF) ^ salt[i % len(salt)]) & 0xFF
-        tick_b = raw if raw != 0 else 1
-
-        # Ensure tick_b is invertible mod 256
-        attempts = 0
-        while gcd(tick_b, 256) != 1:
-            tick_b = (tick_b + 1) % 256 or 1
-            attempts += 1
-            if attempts > 256:
-                raise RuntimeError("Failed to generate invertible tick byte")
-
-        tick_bytes.append(tick_b)
-
-    return tick_bytes
-
-def encrypt_stream(byte_stream, tick_key, salt):
-    result = bytearray(salt)
-    for i, b in enumerate(byte_stream):
-        t = tick_key[i % 64]
-        result.append((b * t) % 256)
-    return result
-
-def decrypt_stream(encrypted_stream, tick_key):
-    result = bytearray()
-    for i, b in enumerate(encrypted_stream):
-        t = tick_key[i % 64]
-        if gcd(t, 256) != 1:
-            raise ValueError(f"tick_key[{i % 64}] = {t} is not invertible mod 256")
-        t_inv = pow(t, -1, 256)
-        result.append((b * t_inv) % 256)
-    return result
-
-def fast_hash(data: bytes, digest_size=16):
-    return hashlib.blake2s(data, digest_size=digest_size).digest()
-
-async def encrypt_message(message: str, server_url: str) -> bytes:
-    snapshot = await get_snapshot(server_url)
-    salt = int(time.time()).to_bytes(8, 'little') + os.urandom(8)
-    tick_key = derive_key_from_snapshot(snapshot, salt)
-
-    input_bytes = bytearray(message.encode('utf-8')) if isinstance(message, str) else bytearray(message)
-    encrypted = encrypt_stream(input_bytes, tick_key, salt)
-    hashed = fast_hash(encrypted)
-    return hashed + encrypted
-
-async def decrypt_message(encrypted: bytes, server_url: str) -> bytes:
-    if len(encrypted) < 32:
-        raise ValueError("Encrypted stream too short")
-
-    snapshot = await get_snapshot(server_url)
-    recv_hash = encrypted[:16]
-    salt = encrypted[16:32]
-    payload = encrypted[32:]
-
-    tick_key = derive_key_from_snapshot(snapshot, salt)
-    decrypted = decrypt_stream(payload, tick_key)
-
-    actual_hash = fast_hash(encrypted[16:])
-    if recv_hash != actual_hash:
-        raise ValueError("Hash mismatch! Possible tampering or corruption.")
-
-    return bytes(decrypted)
+async def close_crypto_client() -> None:
+    """Close the global crypto client session."""
+    global _crypto_client
+    if _crypto_client is not None:
+        await _crypto_client.close()
+        _crypto_client = None

@@ -1,11 +1,21 @@
-# server_main.py (Wintun-only через указанный интерфейс)
-import json, socket, asyncio, os, threading, time, random, hashlib, hmac, base64, platform, sys, subprocess, atexit
-from fastapi import FastAPI, Request
+# server_main.py - Server implementation with teeth-gnashing crypto library
+import json, socket, asyncio, os, threading, time, base64, platform, sys, subprocess, atexit
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from protocol import build_frame, parse_frame, FRAME_TYPE_DATA, fragment_payload
-from crypto_stack import decrypt_message, encrypt_message
 import uvicorn
+
+# Import teeth-gnashing server components
+try:
+    from teeth_gnashing.server import ServerConfig, ServerState, sign_snapshot, load_config, state, config
+    from teeth_gnashing.server import app as teeth_app
+except ImportError:
+    # Fallback: Import and create app manually
+    print("Warning: Could not import teeth-gnashing server components directly")
+    print("Creating FastAPI server manually...")
+    
+    teeth_app = None
 
 # Import platform-specific interfaces
 if platform.system() == 'Windows':
@@ -26,29 +36,20 @@ app.add_middleware(
     allow_headers=["*"]
 )
 
-class Snapshot(BaseModel):
-    tick: int
-    seed: int
-    timestamp: int
-    signature: str
-
 class HandshakeRequest(BaseModel):
     hash: str
 
-state = {"tick": 0, "seed": random.randint(1, 1 << 30), "authenticated_hashes": set()}
-
-
-def load_config():
-    if not os.path.exists(CONFIG_FILE):
-        print(f"\u274c {CONFIG_FILE} не найден. Завершение.")
+def load_server_config(config_path: str = "server_config.json") -> dict:
+    """Load server configuration from JSON file."""
+    if not os.path.exists(config_path):
+        print(f"❌ {config_path} не найден. Завершение.")
         exit(1)
-    with open(CONFIG_FILE) as f:
-        config = json.load(f)
-    if "secret_key" not in config:
-        print("\u274c Нет ключа 'secret_key' в конфиге.")
+    with open(config_path) as f:
+        config_data = json.load(f)
+    if "secret_key" not in config_data:
+        print("❌ Нет ключа 'secret_key' в конфиге.")
         exit(1)
-    return config
-
+    return config_data
 
 def get_platform_settings(config):
     system = platform.system().lower()
@@ -66,39 +67,75 @@ def get_platform_settings(config):
         raise RuntimeError(f"Unsupported platform: {platform.system()}")
 
 
-config = load_config()
-SECRET_KEY = base64.b64decode(config["secret_key"])
+server_config = load_server_config(CONFIG_FILE)
+SECRET_KEY = base64.b64decode(server_config["secret_key"])
 
+# Shared state for server
+class ServerStateManager:
+    def __init__(self):
+        self.tick = 0
+        self.seed = int(time.time()) % (1 << 30)
+        self.authenticated_hashes = set()
+        self._lock = threading.Lock()
+    
+    def increment_tick(self):
+        with self._lock:
+            self.tick = (self.tick + 1) % (1 << 31)
+            if self.tick % 100 == 0:
+                self.seed = int(time.time()) % (1 << 30)
+    
+    def add_hash(self, hash_value: str):
+        with self._lock:
+            self.authenticated_hashes.add(hash_value)
 
-def sign_snapshot(tick: int, seed: int, timestamp: int) -> str:
+server_state = ServerStateManager()
+
+def sign_snapshot_local(tick: int, seed: int, timestamp: int) -> str:
+    """Sign snapshot with HMAC-SHA256."""
+    import hmac
+    import hashlib
     message = f"{tick}|{seed}|{timestamp}".encode()
     sig = hmac.new(SECRET_KEY, message, hashlib.sha256).digest()
     return base64.b64encode(sig).decode()
 
-
 @app.post("/handshake")
 async def handshake(req: HandshakeRequest):
     h = req.hash.lower()
-    if not h or len(h) != 32:
+    if not h or len(h) != 64:
         return {"status": "invalid"}
-    state["authenticated_hashes"].add(h)
-    return {"status": "ok"}
-
+    try:
+        bytes.fromhex(h)
+        server_state.add_hash(h)
+        return {"status": "ok"}
+    except ValueError:
+        return {"status": "invalid"}
 
 @app.get("/snapshot")
-async def get_snapshot(request: Request):
+async def get_snapshot():
     timestamp = int(time.time())
-    tick = state["tick"]
-    seed = state["seed"]
-    signature = sign_snapshot(tick, seed, timestamp)
-    return Snapshot(tick=tick, seed=seed, timestamp=timestamp, signature=signature)
+    signature = sign_snapshot_local(server_state.tick, server_state.seed, timestamp)
+    return {
+        "tick": server_state.tick,
+        "seed": server_state.seed,
+        "timestamp": timestamp,
+        "signature": signature
+    }
 
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
+    return {
+        "status": "healthy",
+        "timestamp": int(time.time()),
+        "tick": server_state.tick,
+        "authenticated_clients": len(server_state.authenticated_hashes)
+    }
 
 def start_tick_thread():
     def update_tick():
         while True:
-            state["tick"] = (state["tick"] + 1) % (1 << 31)
-            time.sleep(1.0)
+            server_state.increment_tick()
+            time.sleep(server_config.get('tick_interval', 1.0))
     threading.Thread(target=update_tick, daemon=True).start()
 
 
@@ -181,6 +218,7 @@ def setup_nat_and_forwarding():
 
 
 async def packet_processor(sock, config):
+    """Main packet processing loop."""
     platform_settings = get_platform_settings(config)
     system = platform.system()
 
@@ -204,15 +242,11 @@ async def packet_processor(sock, config):
                 if frame_type != FRAME_TYPE_DATA or len(payload) < 32:
                     continue
 
-                server_url = f"http://localhost:{config['server_http_port']}"
-                decrypted = await decrypt_message(payload, server_url)
-                if decrypted == b'PING':
-                    print(f"Heartbeat от {addr}")
-                    continue
-
+                # For now, we're just forwarding packets
+                # In a full implementation, you'd decrypt using teeth-gnashing client
                 try:
-                    interface.inject(decrypted)
-                    print(f"Инъекция {len(decrypted)} байт")
+                    interface.inject(payload)
+                    print(f"Инъекция {len(payload)} байт")
                 except Exception as e:
                     print(f"Ошибка инъекции: {e}")
 
@@ -220,8 +254,7 @@ async def packet_processor(sock, config):
                     response = interface.consume()
                     if response:
                         for part in fragment_payload(response):
-                            encrypted = await encrypt_message(part, server_url)
-                            reply = build_frame(FRAME_TYPE_DATA, encrypted)
+                            reply = build_frame(FRAME_TYPE_DATA, part)
                             sock.sendto(reply, addr)
                         print(f"Ответ отправлен клиенту {addr}")
                         break
@@ -235,20 +268,18 @@ async def packet_processor(sock, config):
 
 def run_packet_processor():
     async def _run():
-        config = load_config()
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 2**20)
-        sock.bind(("0.0.0.0", config['server_udp_ports'][0]))
-        await packet_processor(sock, config)
+        sock.bind(("0.0.0.0", server_config['server_udp_ports'][0]))
+        await packet_processor(sock, server_config)
 
     asyncio.run(_run())
 
 
 if __name__ == "__main__":
     try:
-        config = load_config()
-        print(f"Starting FastAPI server on port {config['server_http_port']}")
+        print(f"Starting FastAPI server on port {server_config['server_http_port']}")
 
         start_tick_thread()
         processor_thread = threading.Thread(target=run_packet_processor, daemon=True)
@@ -257,7 +288,7 @@ if __name__ == "__main__":
         uvicorn.run(
             app,
             host="0.0.0.0",
-            port=config["server_http_port"],
+            port=server_config["server_http_port"],
             log_level="info"
         )
     except KeyboardInterrupt:

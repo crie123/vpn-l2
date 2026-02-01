@@ -4,3 +4,4 @@ pydantic
 paramiko
 pydivert
 uvicorn[standard]
+teeth-gnashing>=1.0.0
