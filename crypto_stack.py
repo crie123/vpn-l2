@@ -10,54 +10,30 @@ import os
 import json
 import base64
 from typing import Optional, Union
-import logging
 
-# Use module logger; default logging level will suppress debug output unless configured
-logger = logging.getLogger(__name__)
-
-
-# Import teeth-gnashing client components - prefer direct import; fallback silently to file loading
+# Import teeth-gnashing client components - only import what we need
 try:
-    from teeth_gnashing.client import (
-        CryptoClient,
-        CryptoConfig,
-        CryptoError,
-        AuthenticationError,
-        SnapshotError,
-    )
-except Exception as exc:  # noqa: BLE001 - guard against any import-time errors in package __init__
-    logger.debug("Direct import of teeth_gnashing.client failed: %s", exc)
-    # Try to locate and load client.py directly from site-packages without executing package __init__
+    from teeth_gnashing.client import CryptoClient, CryptoConfig, CryptoError, AuthenticationError, SnapshotError
+except ImportError as e:
+    # Handle broken imports in teeth-gnashing package
+    print(f"Warning: Error importing from teeth_gnashing.client: {e}")
+    print("Attempting alternative import strategy...")
+    
+    # Try importing just the client module directly
     import sys
-    from pathlib import Path
     import importlib.util
-
-    client_module = None
-    for p in sys.path:
-        try_path = Path(p) / "teeth_gnashing" / "client.py"
-        if try_path.exists():
-            spec = importlib.util.spec_from_file_location("teeth_gnashing.client", str(try_path))
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                # Register under package.submodule name so relative imports work if any
-                sys.modules["teeth_gnashing.client"] = module
-                spec.loader.exec_module(module)
-                client_module = module
-                break
-
-    if client_module is None:
-        # As a last resort, attempt normal import to surface the original error
-        raise ImportError(
-            "Failed to import 'teeth_gnashing.client'. Ensure 'teeth-gnashing' is installed and not broken. "
-            "Original error: %s" % exc
-        ) from exc
-
-    # Extract expected symbols
-    CryptoClient = client_module.CryptoClient
-    CryptoConfig = client_module.CryptoConfig
-    CryptoError = client_module.CryptoError
-    AuthenticationError = client_module.AuthenticationError
-    SnapshotError = client_module.SnapshotError
+    spec = importlib.util.find_spec("teeth_gnashing.client")
+    if spec and spec.origin:
+        spec_module = importlib.util.module_from_spec(spec)
+        sys.modules["teeth_gnashing.client"] = spec_module
+        spec.loader.exec_module(spec_module)
+        CryptoClient = spec_module.CryptoClient
+        CryptoConfig = spec_module.CryptoConfig
+        CryptoError = spec_module.CryptoError
+        AuthenticationError = spec_module.AuthenticationError
+        SnapshotError = spec_module.SnapshotError
+    else:
+        raise
 
 # Global client instance
 _crypto_client: Optional[CryptoClient] = None
