@@ -5,7 +5,7 @@
 ### 1. Замена шифрования на teeth-gnashing
 
 **Файл: `crypto_stack.py`**
-- ❌ Удалена: Кастомная реализация шифрования
+- ❌ Удален: Прототип teeth-gnashing код
 - ✅ Добавлена: Интеграция с `teeth_gnashing.client.CryptoClient`
 - ✅ Добавлены: Функции управления сессией и конфигурацией
 - ✅ Улучшено: Обработка ошибок через custom исключения
@@ -19,7 +19,7 @@ pydantic
 paramiko
 pydivert
 uvicorn[standard]
-teeth-gnashing>=1.0.0  # ← НОВОЕ
+teeth-gnashing>=1.0.0
 ```
 
 ### 3. Адаптация server_main.py
@@ -243,7 +243,7 @@ curl http://localhost:8000/health
 
 ### Ресурсы
 - teeth-gnashing PyPI: https://pypi.org/project/teeth-gnashing/
-- teeth-gnashing GitHub: https://github.com/kirill-nikitenko/teeth-gnashing
+- teeth-gnashing GitHub: https://github.com/crie123/teeth-gnashing
 - FastAPI docs: https://fastapi.tiangolo.com/
 - Paramiko docs: https://www.paramiko.org/
 
@@ -261,6 +261,6 @@ curl http://localhost:8000/health
 
 ---
 
-**Проект успешно обновлён на teeth-gnashing 1.0.0!** 🎉
+**Проект успешно обновлён на teeth-gnashing 1.0.0** 
 
 Все файлы готовы к использованию. Начните с прочтения README.md для полного понимания проекта.

@@ -2,7 +2,7 @@
 
 ## Обзор изменений
 
-Проект успешно обновлён с использования прототипа teeth-gnashing на официальную релиз-версию **1.0.0** с PyPI.
+Проект обновлён с использования прототипа teeth-gnashing на официальную релиз-версию **1.0.0** с PyPI.
 
 ## Основные изменения
 
@@ -119,18 +119,13 @@ async def encrypt_message(message: Union[str, bytes], server_url: str,
 
 ✅ **Криптографическая стойкость**
 - Использование tested production-grade компонентов
-- ChaCha20 вместо кустарных алгоритмов
+- ChaCha20 reinforced генерация ключей
 - Профессиональная проверка безопасности
 
 ✅ **Производительность**
 - Оптимизированная генерация ключей
 - Лучшее использование памяти
 - Параллельная обработка где возможно
-
-✅ **Поддержка и обновления**
-- Регулярные обновления безопасности на PyPI
-- Багфиксы от команды разработчиков
-- Сообщество пользователей
 
 ✅ **Расширяемость**
 - Чистый API для интеграции
@@ -247,7 +242,7 @@ pip install --upgrade teeth-gnashing>=1.0.0
 ## Дополнительные ресурсы
 
 - [teeth-gnashing на PyPI](https://pypi.org/project/teeth-gnashing/)
-- [teeth-gnashing GitHub](https://github.com/kirill-nikitenko/teeth-gnashing)
+- [teeth-gnashing GitHub](https://github.com/crie123/teeth-gnashing)
 - [Основной README](./README.md)
 
 ## Поддержка
